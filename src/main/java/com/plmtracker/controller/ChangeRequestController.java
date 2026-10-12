@@ -6,6 +6,7 @@ import com.plmtracker.dto.UpdateChangeRequestRequest;
 import com.plmtracker.model.ChangeRequest;
 import com.plmtracker.model.ChangeRequestStatus;
 import com.plmtracker.service.ChangeRequestService;
+import com.plmtracker.service.JiraSyncService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,9 +26,11 @@ import java.util.List;
 public class ChangeRequestController {
 
     private final ChangeRequestService service;
+    private final JiraSyncService jiraSyncService;
 
-    public ChangeRequestController(ChangeRequestService service) {
+    public ChangeRequestController(ChangeRequestService service, JiraSyncService jiraSyncService) {
         this.service = service;
+        this.jiraSyncService = jiraSyncService;
     }
 
     @PostMapping
@@ -56,5 +59,11 @@ public class ChangeRequestController {
     public ChangeRequestResponse update(@PathVariable Long id,
                                         @Valid @RequestBody UpdateChangeRequestRequest request) {
         return ChangeRequestResponse.from(service.update(id, request));
+    }
+
+    /** Retries creating the Jira issue for one request (for example after it was FAILED). */
+    @PostMapping("/{id}/jira-sync")
+    public ChangeRequestResponse retryJiraSync(@PathVariable Long id) {
+        return ChangeRequestResponse.from(jiraSyncService.retry(id));
     }
 }

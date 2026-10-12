@@ -18,12 +18,17 @@ import java.util.Locale;
 public class ChangeRequestService {
 
     private final ChangeRequestRepository repository;
+    private final JiraSyncService jiraSyncService;
 
-    public ChangeRequestService(ChangeRequestRepository repository) {
+    public ChangeRequestService(ChangeRequestRepository repository, JiraSyncService jiraSyncService) {
         this.repository = repository;
+        this.jiraSyncService = jiraSyncService;
     }
 
-    @Transactional
+    /**
+     * Saves the request first (own transaction), then tries to create the Jira issue.
+     * Not @Transactional on purpose: the request must stay saved even if Jira is down.
+     */
     public ChangeRequest create(CreateChangeRequestRequest req) {
         ChangeRequest cr = new ChangeRequest();
         cr.setPartNumber(normalizePartNumber(req.partNumber()));
@@ -32,7 +37,9 @@ public class ChangeRequestService {
         cr.setPriority(req.priority() != null ? req.priority() : Priority.MEDIUM);
         cr.setCreatedBy(req.createdBy().trim());
         // status = OPEN and jiraSyncState = PENDING come from the entity defaults
-        return repository.save(cr);
+        ChangeRequest saved = repository.save(cr);
+        jiraSyncService.sync(saved); // marks SYNCED (key + url) or FAILED, never throws
+        return saved;
     }
 
     @Transactional(readOnly = true)

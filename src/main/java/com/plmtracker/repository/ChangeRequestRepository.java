@@ -2,6 +2,7 @@ package com.plmtracker.repository;
 
 import com.plmtracker.model.ChangeRequest;
 import com.plmtracker.model.ChangeRequestStatus;
+import com.plmtracker.model.JiraSyncState;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -16,6 +17,9 @@ public interface ChangeRequestRepository extends JpaRepository<ChangeRequest, Lo
     List<ChangeRequest> findByPartNumberOrderByCreatedAtDesc(String partNumber);
 
     List<ChangeRequest> findByStatusAndPartNumberOrderByCreatedAtDesc(ChangeRequestStatus status, String partNumber);
+
+    /** Requests whose Jira issue still has to be created (used by the retry job). */
+    List<ChangeRequest> findByJiraSyncStateOrderByCreatedAtAsc(JiraSyncState jiraSyncState);
 
     /** Used by the Jira webhook in a later ticket. */
     Optional<ChangeRequest> findByJiraKey(String jiraKey);

@@ -34,11 +34,14 @@ class ChangeRequestServiceTest {
     @Mock
     private ChangeRequestRepository repository;
 
+    @Mock
+    private JiraSyncService jiraSyncService;
+
     private ChangeRequestService service;
 
     @BeforeEach
     void setUp() {
-        service = new ChangeRequestService(repository);
+        service = new ChangeRequestService(repository, jiraSyncService);
         when(repository.save(any(ChangeRequest.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -56,6 +59,17 @@ class ChangeRequestServiceTest {
         assertThat(saved.getStatus()).isEqualTo(ChangeRequestStatus.OPEN);
         assertThat(saved.getJiraSyncState()).isEqualTo(JiraSyncState.PENDING);
         assertThat(saved.getJiraKey()).isNull();
+    }
+
+    @Test
+    void create_savesFirstThenTriesJiraSync() {
+        var req = new CreateChangeRequestRequest("P-1", "t", "r", null, "me");
+
+        ChangeRequest saved = service.create(req);
+
+        var order = org.mockito.Mockito.inOrder(repository, jiraSyncService);
+        order.verify(repository).save(any(ChangeRequest.class));
+        order.verify(jiraSyncService).sync(saved);
     }
 
     @Test
