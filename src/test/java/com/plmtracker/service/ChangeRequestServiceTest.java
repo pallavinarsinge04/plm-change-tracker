@@ -4,10 +4,14 @@ import com.plmtracker.dto.CreateChangeRequestRequest;
 import com.plmtracker.dto.UpdateChangeRequestRequest;
 import com.plmtracker.exception.BusinessRuleException;
 import com.plmtracker.exception.ResourceNotFoundException;
+import com.plmtracker.exception.UnknownPartException;
 import com.plmtracker.model.ChangeRequest;
 import com.plmtracker.model.ChangeRequestStatus;
 import com.plmtracker.model.JiraSyncState;
 import com.plmtracker.model.Priority;
+import com.plmtracker.plm.PartCatalog;
+import com.plmtracker.plm.PartCatalogException;
+import com.plmtracker.plm.PartInfo;
 import com.plmtracker.repository.ChangeRequestRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,11 +41,14 @@ class ChangeRequestServiceTest {
     @Mock
     private JiraSyncService jiraSyncService;
 
+    @Mock
+    private PartCatalog partCatalog;
+
     private ChangeRequestService service;
 
     @BeforeEach
     void setUp() {
-        service = new ChangeRequestService(repository, jiraSyncService);
+        service = new ChangeRequestService(repository, jiraSyncService, partCatalog);
         when(repository.save(any(ChangeRequest.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -70,6 +77,55 @@ class ChangeRequestServiceTest {
         var order = org.mockito.Mockito.inOrder(repository, jiraSyncService);
         order.verify(repository).save(any(ChangeRequest.class));
         order.verify(jiraSyncService).sync(saved);
+    }
+
+    @Test
+    void create_partExistsInMiniPlm_isSaved() {
+        when(partCatalog.isEnabled()).thenReturn(true);
+        when(partCatalog.findByPartNumber("P-3001"))
+                .thenReturn(Optional.of(new PartInfo("P-3001", "Bolt", "A", "RELEASED")));
+
+        ChangeRequest saved = service.create(
+                new CreateChangeRequestRequest(" p-3001 ", "t", "r", null, "me"));
+
+        assertThat(saved.getPartNumber()).isEqualTo("P-3001");
+        verify(repository).save(any(ChangeRequest.class));
+    }
+
+    @Test
+    void create_unknownPart_isRejectedAndNothingSaved() {
+        when(partCatalog.isEnabled()).thenReturn(true);
+        when(partCatalog.findByPartNumber("P-9999")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(
+                new CreateChangeRequestRequest("p-9999", "t", "r", null, "me")))
+                .isInstanceOf(UnknownPartException.class)
+                .hasMessageContaining("P-9999");
+
+        verify(repository, never()).save(any(ChangeRequest.class));
+        verify(jiraSyncService, never()).sync(any(ChangeRequest.class));
+    }
+
+    @Test
+    void create_miniPlmDown_failsAndNothingSaved() {
+        when(partCatalog.isEnabled()).thenReturn(true);
+        when(partCatalog.findByPartNumber(any())).thenThrow(new PartCatalogException("down"));
+
+        assertThatThrownBy(() -> service.create(
+                new CreateChangeRequestRequest("P-1", "t", "r", null, "me")))
+                .isInstanceOf(PartCatalogException.class);
+
+        verify(repository, never()).save(any(ChangeRequest.class));
+    }
+
+    @Test
+    void create_validationDisabled_skipsMiniPlmCompletely() {
+        when(partCatalog.isEnabled()).thenReturn(false);
+
+        service.create(new CreateChangeRequestRequest("P-1", "t", "r", null, "me"));
+
+        verify(partCatalog, never()).findByPartNumber(any());
+        verify(repository).save(any(ChangeRequest.class));
     }
 
     @Test

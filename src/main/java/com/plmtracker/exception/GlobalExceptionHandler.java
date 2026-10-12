@@ -1,6 +1,7 @@
 package com.plmtracker.exception;
 
 import com.plmtracker.jira.JiraIntegrationException;
+import com.plmtracker.plm.PartCatalogException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -34,6 +35,19 @@ public class GlobalExceptionHandler {
             body.put("jiraStatus", ex.getUpstreamStatus());
         }
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(body);
+    }
+
+    /** The part number is not in Mini PLM: the request is well-formed but cannot be processed. */
+    @ExceptionHandler(UnknownPartException.class)
+    public ResponseEntity<Map<String, Object>> unknownPart(UnknownPartException ex) {
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
+    }
+
+    /** Mini PLM is unreachable, so we cannot check the part number. Nothing was saved. */
+    @ExceptionHandler(PartCatalogException.class)
+    public ResponseEntity<Map<String, Object>> catalogDown(PartCatalogException ex) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE,
+                "Cannot verify the part number right now (" + ex.getMessage() + "). Please try again.");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

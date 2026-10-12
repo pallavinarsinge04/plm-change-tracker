@@ -4,9 +4,11 @@ import com.plmtracker.dto.CreateChangeRequestRequest;
 import com.plmtracker.dto.UpdateChangeRequestRequest;
 import com.plmtracker.exception.BusinessRuleException;
 import com.plmtracker.exception.ResourceNotFoundException;
+import com.plmtracker.exception.UnknownPartException;
 import com.plmtracker.model.ChangeRequest;
 import com.plmtracker.model.ChangeRequestStatus;
 import com.plmtracker.model.Priority;
+import com.plmtracker.plm.PartCatalog;
 import com.plmtracker.repository.ChangeRequestRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,10 +21,14 @@ public class ChangeRequestService {
 
     private final ChangeRequestRepository repository;
     private final JiraSyncService jiraSyncService;
+    private final PartCatalog partCatalog;
 
-    public ChangeRequestService(ChangeRequestRepository repository, JiraSyncService jiraSyncService) {
+    public ChangeRequestService(ChangeRequestRepository repository,
+                                JiraSyncService jiraSyncService,
+                                PartCatalog partCatalog) {
         this.repository = repository;
         this.jiraSyncService = jiraSyncService;
+        this.partCatalog = partCatalog;
     }
 
     /**
@@ -30,8 +36,11 @@ public class ChangeRequestService {
      * Not @Transactional on purpose: the request must stay saved even if Jira is down.
      */
     public ChangeRequest create(CreateChangeRequestRequest req) {
+        String partNumber = normalizePartNumber(req.partNumber());
+        verifyPartExists(partNumber);
+
         ChangeRequest cr = new ChangeRequest();
-        cr.setPartNumber(normalizePartNumber(req.partNumber()));
+        cr.setPartNumber(partNumber);
         cr.setTitle(req.title().trim());
         cr.setReason(req.reason().trim());
         cr.setPriority(req.priority() != null ? req.priority() : Priority.MEDIUM);
@@ -75,6 +84,19 @@ public class ChangeRequestService {
         cr.setReason(req.reason().trim());
         cr.setPriority(req.priority());
         return repository.save(cr);
+    }
+
+    /**
+     * A change request must point at a real part. Skipped when Mini PLM is not configured.
+     * If Mini PLM is down, PartCatalogException propagates (503) and nothing is saved.
+     */
+    private void verifyPartExists(String partNumber) {
+        if (!partCatalog.isEnabled()) {
+            return;
+        }
+        if (partCatalog.findByPartNumber(partNumber).isEmpty()) {
+            throw new UnknownPartException(partNumber);
+        }
     }
 
     private String normalizePartNumber(String partNumber) {
