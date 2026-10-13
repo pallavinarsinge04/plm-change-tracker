@@ -9,6 +9,7 @@ import com.plmtracker.service.ChangeRequestService;
 import com.plmtracker.service.JiraSyncService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,8 +35,14 @@ public class ChangeRequestController {
     }
 
     @PostMapping
-    public ResponseEntity<ChangeRequestResponse> create(@Valid @RequestBody CreateChangeRequestRequest request) {
-        ChangeRequest saved = service.create(request);
+    public ResponseEntity<ChangeRequestResponse> create(@Valid @RequestBody CreateChangeRequestRequest request,
+                                                        Authentication authentication) {
+        // The author is whoever is logged in. A createdBy sent in the body is ignored,
+        // so nobody can raise a change request in someone else's name.
+        CreateChangeRequestRequest withAuthor = new CreateChangeRequestRequest(
+                request.partNumber(), request.title(), request.reason(),
+                request.priority(), authentication.getName());
+        ChangeRequest saved = service.create(withAuthor);
         return ResponseEntity
                 .created(URI.create("/api/change-requests/" + saved.getId()))
                 .body(ChangeRequestResponse.from(saved));

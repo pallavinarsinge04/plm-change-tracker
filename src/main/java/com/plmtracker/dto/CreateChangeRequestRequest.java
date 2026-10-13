@@ -20,7 +20,6 @@ public record CreateChangeRequestRequest(
         /** Optional. Defaults to MEDIUM. */
         Priority priority,
 
-        @NotBlank(message = "createdBy is required")
-        @Size(max = 100, message = "createdBy must be at most 100 characters")
+        /** Ignored if sent: the server sets it from the logged-in user. */
         String createdBy
 ) {}
